@@ -1,13 +1,16 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
+# Node.js
+node_modules/
 dist/
-wheels/
-*.egg-info
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
 
-# Virtual environments
-.venv
+# TypeScript
+*.tsbuildinfo
 
-# Nix
-result
+# Environment variables
+.env
+.env.local

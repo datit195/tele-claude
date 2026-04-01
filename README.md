@@ -28,8 +28,8 @@ The bot detects Claude Code panes by matching `*claude*` against `pane_current_c
 
 ## Prerequisites
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- Node.js 18+
+- npm, pnpm, or yarn
 - tmux (with Claude Code sessions running in panes)
 - A Telegram bot token (from [@BotFather](https://t.me/BotFather))
 
@@ -47,27 +47,42 @@ The bot detects Claude Code panes by matching `*claude*` against `pane_current_c
 2. Visit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
 3. Find `"chat":{"id":123456789}` in the response
 
-### 3. Set environment variables
+### 3. Configure environment variables
+
+Copy the example environment file and fill in your values:
 
 ```bash
-export CLAUDE_TELEGRAM_BOT_TOKEN="your-bot-token"
-export CLAUDE_TELEGRAM_CHAT_ID="your-chat-id"
+cp .env.example .env
 ```
 
-### 4. Run the bot
-
-Run directly with `uvx` (no clone needed):
+Edit `.env` and set your values:
 
 ```bash
-uvx --from git+https://github.com/datit195/tele-claude tele-claude
+CLAUDE_TELEGRAM_BOT_TOKEN=your-bot-token-here
+CLAUDE_TELEGRAM_CHAT_ID=123456789
 ```
 
-Or clone and run locally:
+### 4. Install and run the bot
+
+Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/datit195/tele-claude.git
 cd tele-claude
-uv run tele-claude
+npm install
+```
+
+Build and run:
+
+```bash
+npm run build
+npm start
+```
+
+Or run in development mode with auto-reload:
+
+```bash
+npm run dev
 ```
 
 ## Usage
