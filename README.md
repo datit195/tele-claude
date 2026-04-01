@@ -59,13 +59,13 @@ export CLAUDE_TELEGRAM_CHAT_ID="your-chat-id"
 Run directly with `uvx` (no clone needed):
 
 ```bash
-uvx --from git+https://github.com/chiendo97/tele-claude tele-claude
+uvx --from git+https://github.com/datit195/tele-claude tele-claude
 ```
 
 Or clone and run locally:
 
 ```bash
-git clone https://github.com/chiendo97/tele-claude.git
+git clone https://github.com/datit195/tele-claude.git
 cd tele-claude
 uv run tele-claude
 ```
