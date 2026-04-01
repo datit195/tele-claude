@@ -4,9 +4,11 @@ import 'dotenv/config';
 import { execSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import TelegramBot from 'node-telegram-bot-api';
+import OpenAI from 'openai';
 
 const BOT_TOKEN = process.env.CLAUDE_TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.CLAUDE_TELEGRAM_CHAT_ID;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 if (!BOT_TOKEN) {
   console.error('Error: CLAUDE_TELEGRAM_BOT_TOKEN environment variable is required');
@@ -28,6 +30,36 @@ interface ClaudePane {
   paneId: string;
   path: string;
 }
+
+interface WatcherState {
+  paneId: string;
+  lastContent: string;
+  lastUpdate: number;
+  messageId: number;
+  intervalId: NodeJS.Timeout;
+}
+
+// OpenAI client (initialized lazily)
+let openaiClient: OpenAI | null = null;
+
+function getOpenAI(): OpenAI | null {
+  if (!OPENAI_API_KEY) {
+    return null;
+  }
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY });
+  }
+  return openaiClient;
+}
+
+// Active watchers per pane
+const activeWatchers = new Map<string, WatcherState>();
+
+// Constants for watcher behavior
+const POLL_INTERVAL_MS = 1500;
+const MIN_UPDATE_INTERVAL_MS = 2000;
+const IDLE_TIMEOUT_MS = 30000;
+const SUMMARIZE_THRESHOLD = 500;
 
 /**
  * List tmux panes running Claude Code.
@@ -73,6 +105,138 @@ function sendToTmux(paneId: string, text: string): void {
     encoding: 'utf-8',
   });
   execSync(`tmux send-keys -t ${paneId} Enter`, { encoding: 'utf-8' });
+}
+
+/**
+ * Capture current content of a tmux pane.
+ */
+function capturePane(paneId: string): string {
+  try {
+    return execSync(`tmux capture-pane -p -t ${paneId}`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Summarize output using OpenAI if it exceeds threshold.
+ */
+async function summarizeOutput(text: string): Promise<string> {
+  if (text.length <= SUMMARIZE_THRESHOLD) {
+    return text;
+  }
+
+  const openai = getOpenAI();
+  if (!openai) {
+    // Truncate if no API key
+    return text.slice(0, SUMMARIZE_THRESHOLD) + '... (truncated)';
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'Summarize this terminal output concisely (max 200 chars)',
+        },
+        { role: 'user', content: text },
+      ],
+      max_tokens: 100,
+    });
+    return response.choices[0]?.message?.content || text.slice(0, SUMMARIZE_THRESHOLD) + '...';
+  } catch (error) {
+    console.error('OpenAI summarization failed:', error);
+    return text.slice(0, SUMMARIZE_THRESHOLD) + '... (truncated)';
+  }
+}
+
+/**
+ * Stop watching a pane.
+ */
+function stopWatching(paneId: string): void {
+  const watcher = activeWatchers.get(paneId);
+  if (watcher) {
+    clearInterval(watcher.intervalId);
+    activeWatchers.delete(paneId);
+    console.log(`Stopped watching pane ${paneId}`);
+  }
+}
+
+/**
+ * Start watching a pane for output changes.
+ */
+function startWatching(bot: TelegramBot, paneId: string, messageId: number): void {
+  // Stop existing watcher if any
+  stopWatching(paneId);
+
+  const initialContent = capturePane(paneId);
+
+  const watcher: WatcherState = {
+    paneId,
+    lastContent: initialContent,
+    lastUpdate: Date.now(),
+    messageId,
+    intervalId: setInterval(() => {
+      void pollPane(bot, paneId);
+    }, POLL_INTERVAL_MS),
+  };
+
+  activeWatchers.set(paneId, watcher);
+  console.log(`Started watching pane ${paneId}`);
+}
+
+/**
+ * Poll a pane for new output.
+ */
+async function pollPane(bot: TelegramBot, paneId: string): Promise<void> {
+  const watcher = activeWatchers.get(paneId);
+  if (!watcher) return;
+
+  const currentContent = capturePane(paneId);
+  const now = Date.now();
+
+  // Check for new content
+  if (currentContent !== watcher.lastContent) {
+    // Find new content (diff from last)
+    const newContent = currentContent.slice(watcher.lastContent.length).trim();
+
+    if (newContent && now - watcher.lastUpdate >= MIN_UPDATE_INTERVAL_MS) {
+      try {
+        const summary = await summarizeOutput(newContent);
+        await bot.editMessageText(`📺 ${paneId}\n\n${summary}`, {
+          chat_id: chatId,
+          message_id: watcher.messageId,
+        });
+      } catch (error) {
+        // Message might be unchanged or other error - ignore
+      }
+
+      watcher.lastContent = currentContent;
+      watcher.lastUpdate = now;
+    } else if (newContent) {
+      // Content changed but not time to update yet, just track it
+      watcher.lastContent = currentContent;
+    }
+  }
+
+  // Check for idle timeout
+  if (now - watcher.lastUpdate >= IDLE_TIMEOUT_MS) {
+    try {
+      const finalContent = capturePane(paneId);
+      const summary = await summarizeOutput(finalContent.slice(-1000)); // Last 1000 chars
+      await bot.editMessageText(`✅ ${paneId} (idle)\n\n${summary}`, {
+        chat_id: chatId,
+        message_id: watcher.messageId,
+      });
+    } catch {
+      // Ignore edit errors
+    }
+    stopWatching(paneId);
+  }
 }
 
 /**
@@ -148,9 +312,13 @@ async function handleMessage(bot: TelegramBot, msg: TelegramBot.Message): Promis
 
   try {
     sendToTmux(paneId, userText);
-    await bot.sendMessage(msg.chat.id, `Sent to pane ${paneId}`, {
+
+    // Send watching message and start output capture
+    const watchMsg = await bot.sendMessage(msg.chat.id, `📺 Watching ${paneId}...`, {
       reply_to_message_id: msg.message_id,
     });
+
+    startWatching(bot, paneId, watchMsg.message_id);
   } catch (error) {
     console.error(`Failed to send to pane ${paneId}:`, error);
     await bot.sendMessage(msg.chat.id, `Failed to send to pane ${paneId}: ${error}`, {

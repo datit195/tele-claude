@@ -25,7 +25,8 @@
   "license": "ISC",
   "dependencies": {
     "dotenv": "^17.3.1",
-    "node-telegram-bot-api": "^0.66.0"
+    "node-telegram-bot-api": "^0.66.0",
+    "openai": "^6.33.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
