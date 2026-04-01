@@ -8,7 +8,7 @@ import OpenAI from 'openai';
 
 const BOT_TOKEN = process.env.CLAUDE_TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.CLAUDE_TELEGRAM_CHAT_ID;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 if (!BOT_TOKEN) {
   console.error('Error: CLAUDE_TELEGRAM_BOT_TOKEN environment variable is required');
@@ -39,17 +39,20 @@ interface WatcherState {
   intervalId: NodeJS.Timeout;
 }
 
-// OpenAI client (initialized lazily)
-let openaiClient: OpenAI | null = null;
+// Groq client using OpenAI SDK (initialized lazily)
+let groqClient: OpenAI | null = null;
 
-function getOpenAI(): OpenAI | null {
-  if (!OPENAI_API_KEY) {
+function getGroq(): OpenAI | null {
+  if (!GROQ_API_KEY) {
     return null;
   }
-  if (!openaiClient) {
-    openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY });
+  if (!groqClient) {
+    groqClient = new OpenAI({
+      apiKey: GROQ_API_KEY,
+      baseURL: 'https://api.groq.com/openai/v1',
+    });
   }
-  return openaiClient;
+  return groqClient;
 }
 
 // Active watchers per pane
@@ -122,22 +125,22 @@ function capturePane(paneId: string): string {
 }
 
 /**
- * Summarize output using OpenAI if it exceeds threshold.
+ * Summarize output using Groq if it exceeds threshold.
  */
 async function summarizeOutput(text: string): Promise<string> {
   if (text.length <= SUMMARIZE_THRESHOLD) {
     return text;
   }
 
-  const openai = getOpenAI();
-  if (!openai) {
+  const groq = getGroq();
+  if (!groq) {
     // Truncate if no API key
     return text.slice(0, SUMMARIZE_THRESHOLD) + '... (truncated)';
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const response = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
       messages: [
         {
           role: 'system',
@@ -149,7 +152,7 @@ async function summarizeOutput(text: string): Promise<string> {
     });
     return response.choices[0]?.message?.content || text.slice(0, SUMMARIZE_THRESHOLD) + '...';
   } catch (error) {
-    console.error('OpenAI summarization failed:', error);
+    console.error('Groq summarization failed:', error);
     return text.slice(0, SUMMARIZE_THRESHOLD) + '... (truncated)';
   }
 }
