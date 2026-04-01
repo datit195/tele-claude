@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tele-claude"
+version = "0.1.0"
+description = "Telegram bot for forwarding messages to Claude Code tmux panes"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-telegram-bot>=22.7",
+]
+
+[project.scripts]
+tele-claude = "tele_claude:main"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.38.3",
+    "ruff>=0.15.7",
+]
