@@ -52,7 +52,7 @@ import {
 } from "./telegram.js";
 import * as state from "./state.js";
 import { setPaneTitle } from "./tmux.js";
-import { htmlEscape, truncate } from "./util.js";
+import { countLines, htmlEscape, truncate } from "./util.js";
 
 // Telegram's hard limit is 4096; leave room for header + HTML margin.
 const MAX_MESSAGE_LEN = 4000;
@@ -578,8 +578,8 @@ function describeToolUse(tool: ToolUseBlock): string | undefined {
   }
   if (name === "Edit") {
     const path = String(i.file_path ?? "?");
-    const oldLines = String(i.old_string ?? "").split("\n").length;
-    const newLines = String(i.new_string ?? "").split("\n").length;
+    const oldLines = countLines(String(i.old_string ?? ""));
+    const newLines = countLines(String(i.new_string ?? ""));
     return `✏️ <b>Edit</b> <code>${escForBlock(path)}</code> (−${oldLines} / +${newLines} lines)`;
   }
   if (name === "Read") {

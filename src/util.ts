@@ -33,3 +33,19 @@ export function expandHome(path: string): string {
   if (path.startsWith("~/")) return homedir() + path.slice(1);
   return path;
 }
+
+/** Count lines the way Python's ``str.splitlines()`` does.
+ *
+ * Differs from ``s.split("\n").length`` in two important ways:
+ *   1. An empty string counts as 0 lines (not 1).
+ *   2. A trailing newline does not add a phantom empty line.
+ *
+ * We need this for the Edit tool-use renderer where a file content
+ * like ``"hello\n"`` should show as 1 line, matching what a user would
+ * see in an editor, not 2. */
+export function countLines(s: string): number {
+  if (!s) return 0;
+  const parts = s.replace(/\r\n/g, "\n").split("\n");
+  if (parts[parts.length - 1] === "") parts.pop();
+  return parts.length;
+}
