@@ -1,6 +1,13 @@
-node_modules/
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
 dist/
-*.log
-.env
-.env.*
-!.env.example
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Nix
+result
