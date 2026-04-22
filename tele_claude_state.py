@@ -15,9 +15,50 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
+
+
+_ENV_LINE_RE = re.compile(
+    r"""^\s*
+        (?:export\s+)?            # optional `export` prefix
+        ([A-Za-z_][A-Za-z0-9_]*)  # key
+        \s*=\s*
+        (.*?)                     # value (possibly quoted)
+        \s*$""",
+    re.VERBOSE,
+)
+
+
+def _load_dotenv() -> None:
+    """Load KEY=value pairs from <repo>/.env into os.environ.
+
+    Existing environment variables win (explicit shell export overrides
+    the file). Supports optional `export` prefix and single/double-quoted
+    values so the same file can be `source`d from bash or read here.
+    Silent on missing file — .env is optional.
+    """
+    env_path = Path(__file__).resolve().parent / ".env"
+    try:
+        text = env_path.read_text()
+    except OSError:
+        return
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = _ENV_LINE_RE.match(line)
+        if not m:
+            continue
+        key, value = m.group(1), m.group(2)
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
+_load_dotenv()
 
 
 def _cache_root() -> Path:
