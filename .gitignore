@@ -1,16 +1,6 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
+node_modules/
 dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
-# Nix
-result
-
-# Local credentials (see .env.example)
+*.log
 .env
+.env.*
+!.env.example
