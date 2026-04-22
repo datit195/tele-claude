@@ -28,8 +28,8 @@ The bot detects Claude Code panes by matching `*claude*` against `pane_current_c
 
 ## Prerequisites
 
-- Node.js 20+
-- npm (ships with Node)
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
 - tmux (with Claude Code sessions running in panes)
 - A Telegram bot token (from [@BotFather](https://t.me/BotFather))
 
@@ -47,47 +47,43 @@ The bot detects Claude Code panes by matching `*claude*` against `pane_current_c
 2. Visit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
 3. Find `"chat":{"id":123456789}` in the response
 
-### 3. Create the `.env` file
+### 3. Clone the repo and create `.env`
 
-Clone the repo and copy the example:
+Clone the repo, then copy `.env.example` to `.env` and fill in your values. Both the bot and the hook dispatcher auto-load this file on startup, so all config lives inside the project folder:
 
 ```bash
-git clone https://github.com/datit195/tele-claude.git
-cd tele-claude
+git clone https://github.com/chiendo97/tele-claude.git ~/tele-claude
+cd ~/tele-claude
 cp .env.example .env
 chmod 600 .env
 ```
 
-Edit `.env` and fill in your bot token and chat ID:
+Edit `~/tele-claude/.env`:
 
 ```
 CLAUDE_TELEGRAM_BOT_TOKEN=your-bot-token
-CLAUDE_TELEGRAM_CHAT_ID=123456789
+CLAUDE_TELEGRAM_CHAT_ID=your-chat-id
 ```
-
-Both the bot and the hook dispatcher load this file automatically on startup — no shell sourcing required. If you prefer shell-level config, any var already set in the environment wins over the `.env` value.
 
 > **Multi-user ACL.** `CLAUDE_TELEGRAM_CHAT_ID` accepts a comma-separated list: `"123,456,789"`. Every listed chat can issue commands and receives forwarded notifications/replies. Anyone not on the list is ignored silently.
 
 ### 4. Run the bot
 
-```bash
-npm install          # installs deps and compiles to dist/ via the prepare script
-npm start            # runs node dist/bot.js
-```
-
-During development, skip the build step:
+From inside the cloned project directory:
 
 ```bash
-npm run dev          # runs src/bot.ts via tsx (no rebuild loop)
+cd ~/tele-claude
+uv run tele-claude
 ```
 
-The package exposes three bin scripts (after `npm install`): `tele-claude` (bot), `tele-claude-hooks` (hook dispatcher, invoked by the shell wrappers below), and `tele-claude-format` (markdown → Telegram HTML filter, handy for ad-hoc previews: `echo -e '# hi\n**bold**' | node dist/format-cli.js`).
+The dispatcher reads `.env` from the repo root automatically — no shell sourcing required. Shell-level env vars still win if set, so `CLAUDE_TELEGRAM_BOT_TOKEN=... uv run tele-claude` keeps working.
+
+The package also exposes a standalone `tele-claude-format` script (defined in `[project.scripts]`). It reads markdown from stdin and writes Telegram HTML to stdout — handy for ad-hoc previews: `echo '# hi\n\n**bold**' | uv run tele-claude-format`.
 
 Run it in a detached tmux session so it survives your terminal closing:
 
 ```bash
-tmux new -d -s tele-claude 'node ~/tele-claude/dist/bot.js'
+tmux new -d -s tele-claude 'cd ~/tele-claude && uv run tele-claude'
 tmux attach -t tele-claude   # view logs
 ```
 
@@ -106,7 +102,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/tele-claude
-ExecStart=/usr/bin/env node %h/tele-claude/dist/bot.js
+EnvironmentFile=%h/tele-claude/.env
+ExecStart=uv run tele-claude
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -129,7 +126,7 @@ systemctl --user restart tele-claude         # after code changes
 journalctl --user -u tele-claude -f          # tail logs
 ```
 
-If `node` isn't on the systemd PATH (nvm / asdf / fnm installs can hide it), replace `/usr/bin/env node` with the absolute path (e.g. `/home/you/.nvm/versions/node/v20.17.0/bin/node`). The service reads `.env` itself — no need to pre-source anything.
+If `uv` isn't on the systemd PATH, replace `ExecStart=uv run tele-claude` with its absolute path (e.g. `ExecStart=/home/you/.local/bin/uv run tele-claude`). `EnvironmentFile` expects plain `KEY=VALUE` lines — the `.env.example` format is compatible as-is.
 
 ## Usage
 
@@ -154,7 +151,7 @@ If `node` isn't on the systemd PATH (nvm / asdf / fnm installs can hide it), rep
 | `/shortcut rm <name>` | Removes a shortcut from the menu. |
 | `/shortcut list` | Shows all registered shortcuts. |
 
-State (active pane, subscribed panes, mute list, shortcuts) persists in `~/.cache/tele-claude/state.json`, so bot restarts don't lose your selections. The same directory holds per-session ephemerals under `progress/`, `heartbeat/`, `activity/`, `fingerprints/`, and cached inbound images under `images/`. Override the root by setting `TELE_CLAUDE_STATE_DIR=/path` in your `.env`.
+State (active pane, subscribed panes, mute list, shortcuts) persists in `~/.cache/tele-claude/state.json`, so bot restarts don't lose your selections. The same directory holds per-session ephemerals under `progress/`, `activity/`, `fingerprints/`, and cached inbound images under `images/`. Override the root by adding `TELE_CLAUDE_STATE_DIR=/path` to the project's `.env`.
 
 ### Subscription model — hooks only forward from panes you've interacted with
 
@@ -203,7 +200,7 @@ Three ways — whichever feels most natural:
 
 1. **Active-pane flow** *(recommended for long chats)* — pick a pane once via `/panes` or `/use %N`. Every normal message goes to that pane until you switch.
 2. **Reply flow** — reply to any message that contains a pane ID (`%N`): bot confirmations, `/panes` listings, and 🤖 Claude replies all work.
-3. **Quick-reply buttons** *(disabled by default; flip `quickReplyKeyboard()` in `src/hooks.ts` to re-enable)* — inline keyboard with `y` / `n` / `continue` / `/clear` / 🛑 ESC buttons under each 🤖 reply. Shipped off because plain typing into the chat turns out to be faster than tapping buttons for most flows.
+3. **Quick-reply buttons** *(disabled by default; flip `_quick_reply_keyboard()` in `tele_claude_hooks.py` to re-enable)* — inline keyboard with `y` / `n` / `continue` / `/clear` / 🛑 ESC buttons under each 🤖 reply. Shipped off because plain typing into the chat turns out to be faster than tapping buttons for most flows.
 
 ### Triggering Claude slash commands from your phone
 
@@ -228,7 +225,7 @@ Attach any photo (or forward one) to the bot chat and it goes straight to the ac
 - Claude Code picks up the absolute path and loads the image via its vision capability
 - **With a caption**: the caption is sent first (on its own line), then the path — Claude reads the instruction and the image together: `check this screenshot for errors\n/home/you/.cache/tele-claude/images/tg_123_abc.jpg`
 - **Without a caption**: just the path — follow up with text afterwards and Claude remembers the image
-- Override destination by setting `TELE_CLAUDE_IMAGE_DIR=/path/to/dir` in your `.env`
+- Override destination by adding `TELE_CLAUDE_IMAGE_DIR=/path/to/dir` to the project's `.env`
 
 > **Albums (multiple photos in one send):** Telegram delivers each as its own message; the bot forwards them one by one in order.
 
@@ -284,9 +281,9 @@ Claude in pane %21                        Telegram
        | <------------- "1" -------------------|  callback → tmux send-keys
 ```
 
-### 1. Reuse the `.env` file
+### 1. Reuse the project's `.env`
 
-The hook dispatcher auto-loads `.env` from the repo root (the `.env` created in [Setup → step 3](#3-create-the-env-file)) so you don't need to export secrets in every shell — the wrappers just exec Node and the dispatcher handles the rest.
+The hook dispatcher auto-loads `.env` from the project root (the one you created in [Setup → step 3](#3-clone-the-repo-and-create-env)) so you don't need to export secrets in every shell. The wrappers below just exec the Python module and the dispatcher handles config loading itself.
 
 ### 2. Make `claude` forward by default
 
@@ -309,28 +306,69 @@ Usage:
 
 ### 3. Install the hook wrappers
 
-Hook logic lives in `src/hooks.ts` (compiled to `dist/hooks.js`). The shell hooks are thin wrappers that exec the Node dispatcher — keeps curl/jq complexity out of bash and lets the hooks build inline keyboards, dedup, and split long messages.
+Hook logic lives in Python modules in this repo (`tele_claude_hooks.py`, `tele_claude_format.py`, `tele_claude_state.py`). The shell hooks are thin wrappers that exec the Python module — keeps curl/jq complexity out of bash and lets the hooks build inline keyboards, dedup, and split long messages.
 
-Because every hook wrapper is the same except for the mode name, you can generate them in one pass:
+Save as `~/.claude/hooks/telegram-notify.sh`:
 
 ```bash
-for mode in notify reply progress post-tool-use subagent-stop teammate-idle; do
-  arg="${mode//-/_}"
-  cat > "$HOME/.claude/hooks/telegram-${mode}.sh" <<EOF
 #!/usr/bin/env bash
-[ "\${TELE_CLAUDE:-}" = "1" ] || exit 0
-HOME_DIR="\${TELE_CLAUDE_HOME:-\$HOME/tele-claude}"
-exec node "\$HOME_DIR/dist/hooks.js" ${arg}
-EOF
-done
+[ "${TELE_CLAUDE:-}" = "1" ] || exit 0
+HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
+exec python3 "$HOME_DIR/tele_claude_hooks.py" notify
+```
+
+Save as `~/.claude/hooks/telegram-reply.sh`:
+
+```bash
+#!/usr/bin/env bash
+[ "${TELE_CLAUDE:-}" = "1" ] || exit 0
+HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
+exec python3 "$HOME_DIR/tele_claude_hooks.py" reply
+```
+
+Save as `~/.claude/hooks/telegram-progress.sh`:
+
+```bash
+#!/usr/bin/env bash
+[ "${TELE_CLAUDE:-}" = "1" ] || exit 0
+HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
+exec python3 "$HOME_DIR/tele_claude_hooks.py" progress
+```
+
+Save as `~/.claude/hooks/telegram-post-tool-use.sh`:
+
+```bash
+#!/usr/bin/env bash
+[ "${TELE_CLAUDE:-}" = "1" ] || exit 0
+HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
+exec python3 "$HOME_DIR/tele_claude_hooks.py" post_tool_use
+```
+
+Save as `~/.claude/hooks/telegram-subagent-stop.sh`:
+
+```bash
+#!/usr/bin/env bash
+[ "${TELE_CLAUDE:-}" = "1" ] || exit 0
+HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
+exec python3 "$HOME_DIR/tele_claude_hooks.py" subagent_stop
+```
+
+Save as `~/.claude/hooks/telegram-teammate-idle.sh` *(only useful if you set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and use Claude Code's Agent Teams feature)*:
+
+```bash
+#!/usr/bin/env bash
+[ "${TELE_CLAUDE:-}" = "1" ] || exit 0
+HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
+exec python3 "$HOME_DIR/tele_claude_hooks.py" teammate_idle
+```
+
+Make them executable:
+
+```bash
 chmod +x ~/.claude/hooks/telegram-{notify,reply,progress,post-tool-use,subagent-stop,teammate-idle}.sh
 ```
 
-The `teammate-idle` wrapper is only useful if you set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and use Claude Code's Agent Teams feature.
-
-> **Where the repo lives.** Each wrapper resolves the repo from `$TELE_CLAUDE_HOME` (fallback `~/tele-claude`) and invokes `dist/hooks.js`. The hook dispatcher then reads `$TELE_CLAUDE_HOME/.env` itself — no shell-source step. Cloned elsewhere? Export `TELE_CLAUDE_HOME=/path/to/repo` in your shell rc.
->
-> **Rebuild after changes.** Whenever you edit `src/*.ts`, run `npm run build` to refresh `dist/`. The hook wrappers execute `dist/hooks.js` directly — they don't pass through `tsx` at runtime so there's no source-watching.
+> **Where the repo lives.** Each wrapper resolves the repo from `$TELE_CLAUDE_HOME` (fallback `~/tele-claude`) and invokes `tele_claude_hooks.py`. The Python dispatcher then auto-loads `$TELE_CLAUDE_HOME/.env` itself — no shell-source step. Cloned elsewhere? Export `TELE_CLAUDE_HOME=/path/to/repo` in your shell rc (it's needed before the `.env` can be found, so it can't live inside `.env`).
 
 ### 4. Register the hooks
 
@@ -409,15 +447,15 @@ From Telegram:
 
 ### What the reply hook does for you
 
-- **Markdown → Telegram HTML** via `src/format.ts` (headers → bold, `**foo**` → `<b>foo</b>`, fenced blocks → `<pre><code>`). **Tables adapt to width**: narrow tables (≤ 34 chars total) render as aligned `<pre>` monospace blocks with Unicode separators; wider tables flatten to vertical bullet blocks (`• <b>label</b>\n  → value` for 2-col, labeled sub-lines for 3+) because Telegram mobile wraps `<pre>` instead of scrolling horizontally. Tune via `PRE_MAX_WIDTH` in the formatter
+- **Markdown → Telegram HTML** via `tele_claude_format.py` (headers → bold, `**foo**` → `<b>foo</b>`, fenced blocks → `<pre><code>`). **Tables adapt to width**: narrow tables (≤ 34 chars total) render as aligned `<pre>` monospace blocks with Unicode separators; wider tables flatten to vertical bullet blocks (`• <b>label</b>\n  → value` for 2-col, labeled sub-lines for 3+) because Telegram mobile wraps `<pre>` instead of scrolling horizontally. Tune via `_PRE_MAX_WIDTH` in the formatter
 - **HTML-aware smart split** — markdown is chunked, each chunk is converted to HTML, and the raw-markdown budget shrinks iteratively (2500 → 800 chars) until every chunk's HTML form fits under Telegram's 4096-char limit. Prevents silent 400s from tag-inflated messages
 - **Race-safe transcript read** — Claude Code's JSONL writer is buffered, so the Stop hook can fire a few hundred ms before the final text block is flushed to disk. The hook polls the transcript until two consecutive reads return the same text (max 1.5 s), guaranteeing it sees the complete turn
 - **Typing indicator while Claude works** — the UserPromptSubmit hook detaches a pumper subprocess that re-sends `sendChatAction=typing` every 4 s so Telegram shows a live "is typing…" status in the chat header. The pumper exits automatically the instant the Stop hook clears the progress file (≤ 4 s lag) or after a hard 10-min cap if Stop never fires
-- **Idle-prompt throttling** — Claude Code's `idle_prompt` fires on a hardcoded 60 s timer ([feature request](https://github.com/anthropics/claude-code/issues/13922) for configurability still open). The notify hook suppresses it unless the session has been genuinely silent for `$TELE_CLAUDE_IDLE_MIN_SECONDS` (default **900 s / 15 min**). Both `UserPromptSubmit` and `Stop` hooks count as activity. Override per install by adding e.g. `TELE_CLAUDE_IDLE_MIN_SECONDS=600` to your `.env`
+- **Idle-prompt throttling** — Claude Code's `idle_prompt` fires on a hardcoded 60 s timer ([feature request](https://github.com/anthropics/claude-code/issues/13922) for configurability still open). The notify hook suppresses it unless the session has been genuinely silent for `$TELE_CLAUDE_IDLE_MIN_SECONDS` (default **900 s / 15 min**). Both `UserPromptSubmit` and `Stop` hooks count as activity. Override per install by adding e.g. `TELE_CLAUDE_IDLE_MIN_SECONDS=600` to the project's `.env`
 - **Dedup** — identical bodies sent within 5 s for the same session are skipped (silences re-fires)
 - **Mute aware** — panes muted via `/mute %N` get no reply hook at all
 - **URL extraction** — up to 4 `http(s)://` links in the reply become `🔗 Open <last-path-segment>` buttons under the message
-- **Quick-reply keyboard** *(disabled by default)* — `y` / `n` / `continue` / `/clear` / 🛑 ESC buttons; `src/hooks.ts:quickReplyKeyboard` returns `[]` — flip back to a populated list to re-enable
+- **Quick-reply keyboard** *(disabled by default)* — `y` / `n` / `continue` / `/clear` / 🛑 ESC buttons; `tele_claude_hooks.py:_quick_reply_keyboard` returns `[]` — flip back to a populated list to re-enable
 
 ### Caveats
 
@@ -433,7 +471,7 @@ From Telegram:
 - Text is sent to tmux using the `-l` (literal) flag to prevent shell metacharacter interpretation
 - The bot uses long polling (no webhook/exposed server needed)
 - Callback data on inline buttons includes the `%PANE` it targets — the bot validates the pane still exists before acting
-- Credentials live in the repo's `.env` (chmod 600) and a single state file at `~/.cache/tele-claude/state.json`
+- Credentials live in the project's `.env` (chmod 600) and a single state file at `~/.cache/tele-claude/state.json`
 
 ## Future work: forum-mode topics (one thread per pane)
 
