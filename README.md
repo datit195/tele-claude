@@ -308,7 +308,13 @@ Usage:
 
 Hook logic lives in Python modules in this repo (`tele_claude_hooks.py`, `tele_claude_format.py`, `tele_claude_state.py`). The shell hooks are thin wrappers that exec the Python module — keeps curl/jq complexity out of bash and lets the hooks build inline keyboards, dedup, and split long messages.
 
-Save as `~/.claude/hooks/telegram-notify.sh`:
+Keep the wrappers under version control alongside the dispatcher by saving them inside `.claude/hooks/` under the repo root — same convention Claude Code uses for its own per-project config dir. `~/.claude/settings.json` still does the actual registration; it just points at these paths. The examples below assume the repo is at `~/tele-claude`; swap the prefix if you cloned elsewhere.
+
+```bash
+mkdir -p ~/tele-claude/.claude/hooks
+```
+
+Save as `~/tele-claude/.claude/hooks/telegram-notify.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -317,7 +323,7 @@ HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
 exec python3 "$HOME_DIR/tele_claude_hooks.py" notify
 ```
 
-Save as `~/.claude/hooks/telegram-reply.sh`:
+Save as `~/tele-claude/.claude/hooks/telegram-reply.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -326,7 +332,7 @@ HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
 exec python3 "$HOME_DIR/tele_claude_hooks.py" reply
 ```
 
-Save as `~/.claude/hooks/telegram-progress.sh`:
+Save as `~/tele-claude/.claude/hooks/telegram-progress.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -335,7 +341,7 @@ HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
 exec python3 "$HOME_DIR/tele_claude_hooks.py" progress
 ```
 
-Save as `~/.claude/hooks/telegram-post-tool-use.sh`:
+Save as `~/tele-claude/.claude/hooks/telegram-post-tool-use.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -344,7 +350,7 @@ HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
 exec python3 "$HOME_DIR/tele_claude_hooks.py" post_tool_use
 ```
 
-Save as `~/.claude/hooks/telegram-subagent-stop.sh`:
+Save as `~/tele-claude/.claude/hooks/telegram-subagent-stop.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -353,7 +359,7 @@ HOME_DIR="${TELE_CLAUDE_HOME:-$HOME/tele-claude}"
 exec python3 "$HOME_DIR/tele_claude_hooks.py" subagent_stop
 ```
 
-Save as `~/.claude/hooks/telegram-teammate-idle.sh` *(only useful if you set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and use Claude Code's Agent Teams feature)*:
+Save as `~/tele-claude/.claude/hooks/telegram-teammate-idle.sh` *(only useful if you set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` and use Claude Code's Agent Teams feature)*:
 
 ```bash
 #!/usr/bin/env bash
@@ -365,7 +371,7 @@ exec python3 "$HOME_DIR/tele_claude_hooks.py" teammate_idle
 Make them executable:
 
 ```bash
-chmod +x ~/.claude/hooks/telegram-{notify,reply,progress,post-tool-use,subagent-stop,teammate-idle}.sh
+chmod +x ~/tele-claude/.claude/hooks/telegram-{notify,reply,progress,post-tool-use,subagent-stop,teammate-idle}.sh
 ```
 
 > **Where the repo lives.** Each wrapper resolves the repo from `$TELE_CLAUDE_HOME` (fallback `~/tele-claude`) and invokes `tele_claude_hooks.py`. The Python dispatcher then auto-loads `$TELE_CLAUDE_HOME/.env` itself — no shell-source step. Cloned elsewhere? Export `TELE_CLAUDE_HOME=/path/to/repo` in your shell rc (it's needed before the `.env` can be found, so it can't live inside `.env`).
@@ -381,7 +387,7 @@ Add to `~/.claude/settings.json`:
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/telegram-notify.sh" }
+          { "type": "command", "command": "~/tele-claude/.claude/hooks/telegram-notify.sh" }
         ]
       }
     ],
@@ -389,7 +395,7 @@ Add to `~/.claude/settings.json`:
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/telegram-reply.sh" }
+          { "type": "command", "command": "~/tele-claude/.claude/hooks/telegram-reply.sh" }
         ]
       }
     ],
@@ -397,7 +403,7 @@ Add to `~/.claude/settings.json`:
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/telegram-progress.sh" }
+          { "type": "command", "command": "~/tele-claude/.claude/hooks/telegram-progress.sh" }
         ]
       }
     ],
@@ -405,7 +411,7 @@ Add to `~/.claude/settings.json`:
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/telegram-post-tool-use.sh" }
+          { "type": "command", "command": "~/tele-claude/.claude/hooks/telegram-post-tool-use.sh" }
         ]
       }
     ],
@@ -413,7 +419,7 @@ Add to `~/.claude/settings.json`:
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/telegram-subagent-stop.sh" }
+          { "type": "command", "command": "~/tele-claude/.claude/hooks/telegram-subagent-stop.sh" }
         ]
       }
     ],
@@ -421,7 +427,7 @@ Add to `~/.claude/settings.json`:
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "~/.claude/hooks/telegram-teammate-idle.sh" }
+          { "type": "command", "command": "~/tele-claude/.claude/hooks/telegram-teammate-idle.sh" }
         ]
       }
     ]
